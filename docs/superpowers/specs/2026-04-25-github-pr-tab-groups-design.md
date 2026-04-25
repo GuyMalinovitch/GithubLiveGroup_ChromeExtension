@@ -40,7 +40,7 @@ A Manifest V3 Chrome extension with a **background service worker** that uses `c
 Responsibilities:
 - Register and handle a `chrome.alarms` alarm at the configured interval (default: 5 minutes).
 - On each alarm tick (and on extension startup):
-  1. Read auth token and refresh interval from `chrome.storage.sync`.
+  1. Read auth token and refresh interval from `chrome.storage.local`.
   2. Call GitHub Search API for PRs authored by the user.
   3. Call GitHub Search API for PRs assigned to the user.
   4. Merge and deduplicate results by PR URL.
@@ -110,7 +110,7 @@ chrome.alarms fires
 ## Tab Group Management
 
 - Group name: **"My PRs"**, color: **blue**.
-- **Single managed group** — the extension maintains one global group. It is created in the focused window at first sync; subsequent syncs reuse it regardless of window. State tracks the `groupId` so the group can be found after window switches.
+- **Single managed group** — the extension maintains one global group identified by a stored `groupId`. It is created in the focused window at first sync. On subsequent syncs, new tabs are created **in the window that contains the group** (looked up via `chrome.tabGroups.get(groupId)` to resolve `windowId`), not the currently focused window. If the group no longer exists (user closed it), it is recreated in the focused window and `groupId`/`windowId` are updated in state.
 - If the user manually closes the group (or all its tabs), it is recreated on the next sync tick.
 - If the user drags a tracked PR tab out of the group, it will be moved back into the group on the next sync.
 - Tabs within the group are not reordered by the extension after initial placement.
@@ -200,7 +200,7 @@ github-pr-tabs/
   "manifest_version": 3,
   "permissions": ["tabs", "tabGroups", "storage", "alarms"],
   "host_permissions": ["https://api.github.com/*"],
-  "background": { "service_worker": "background.js" },
+  "background": { "service_worker": "background.js", "type": "module" },
   "action": { "default_popup": "popup.html" }
 }
 ```
