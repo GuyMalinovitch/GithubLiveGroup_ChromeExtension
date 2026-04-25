@@ -1,5 +1,9 @@
 import { parseLinkNext, getAuthenticatedUser, fetchMyPRs } from '../github.js';
 
+afterEach(() => {
+  global.fetch = undefined;
+});
+
 test('parseLinkNext returns null when no header', () => {
   expect(parseLinkNext(null)).toBe(null);
 });

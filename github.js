@@ -20,10 +20,14 @@ async function fetchAllPages(url, token) {
   while (nextUrl) {
     const res = await fetch(nextUrl, { headers: headers(token) });
     if (res.status === 401) throw Object.assign(new Error('Unauthorized'), { code: 'UNAUTHORIZED' });
-    if (res.status === 403) throw Object.assign(new Error('Rate limited'), { code: 'RATE_LIMITED' });
+    if (res.status === 403) throw Object.assign(new Error('GitHub API: rate limited'), { code: 'RATE_LIMITED' });
     if (!res.ok) throw Object.assign(new Error(`GitHub API error: ${res.status}`), { code: 'API_ERROR' });
     const data = await res.json();
-    results.push(...data.items);
+    const items = data?.items;
+    if (!Array.isArray(items)) {
+      throw Object.assign(new Error('GitHub API: unexpected response shape'), { code: 'API_ERROR' });
+    }
+    results.push(...items);
     nextUrl = parseLinkNext(res.headers.get('Link'));
   }
   return results;
@@ -31,8 +35,8 @@ async function fetchAllPages(url, token) {
 
 export async function getAuthenticatedUser(token) {
   const res = await fetch(`${BASE}/user`, { headers: headers(token) });
-  if (res.status === 401) throw Object.assign(new Error('Unauthorized'), { code: 'UNAUTHORIZED' });
-  if (!res.ok) throw Object.assign(new Error(`GitHub API error: ${res.status}`), { code: 'API_ERROR' });
+  if (res.status === 401) throw Object.assign(new Error('GitHub API: unauthorized'), { code: 'UNAUTHORIZED' });
+  if (!res.ok) throw Object.assign(new Error(`GitHub API: error ${res.status}`), { code: 'API_ERROR' });
   const data = await res.json();
   return data.login;
 }
@@ -40,11 +44,11 @@ export async function getAuthenticatedUser(token) {
 export async function fetchMyPRs(token, username) {
   const [authored, assigned] = await Promise.all([
     fetchAllPages(
-      `${BASE}/search/issues?q=type:pr+state:open+author:${username}&per_page=100`,
+      `${BASE}/search/issues?q=type:pr+state:open+author:${encodeURIComponent(username)}&per_page=100`,
       token
     ),
     fetchAllPages(
-      `${BASE}/search/issues?q=type:pr+state:open+assignee:${username}&per_page=100`,
+      `${BASE}/search/issues?q=type:pr+state:open+assignee:${encodeURIComponent(username)}&per_page=100`,
       token
     ),
   ]);
