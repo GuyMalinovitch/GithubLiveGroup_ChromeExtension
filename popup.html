@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GitHub PR Tabs</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+
+    <header>
+      <span class="logo">⬡ My PRs</span>
+      <div class="header-actions">
+        <span id="sync-status" class="status-text"></span>
+        <button id="sync-btn" class="icon-btn" title="Sync now">⟳</button>
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <!-- PR List View -->
+    <div id="pr-view">
+
+      <div id="state-no-token" class="empty-state hidden">
+        <div class="empty-icon">🔑</div>
+        <p>Add your GitHub token to get started.</p>
+        <button id="go-settings-btn" class="primary-btn">Open Settings</button>
+      </div>
+
+      <div id="state-loading" class="empty-state hidden">
+        <div class="spinner"></div>
+        <p>Syncing…</p>
+      </div>
+
+      <div id="state-error" class="empty-state hidden">
+        <div class="empty-icon">⚠️</div>
+        <p id="error-msg"></p>
+      </div>
+
+      <div id="state-empty" class="empty-state hidden">
+        <div class="empty-icon">🎉</div>
+        <p>No open pull requests found.</p>
+      </div>
+
+      <div id="pr-list" class="hidden">
+        <section id="authored-section">
+          <button class="section-header" data-target="authored-list">
+            <span class="chevron">▸</span>
+            <span class="section-label">AUTHORED</span>
+            <span class="section-count" id="authored-count">0</span>
+          </button>
+          <ul id="authored-list" class="pr-group"></ul>
+        </section>
+
+        <section id="assigned-section">
+          <button class="section-header" data-target="assigned-list">
+            <span class="chevron">▸</span>
+            <span class="section-label">ASSIGNED</span>
+            <span class="section-count" id="assigned-count">0</span>
+          </button>
+          <ul id="assigned-list" class="pr-group"></ul>
+        </section>
+      </div>
+    </div>
+
+    <!-- Settings View -->
+    <div id="settings-view" class="hidden">
+      <div class="settings-section">
+        <label class="settings-label" for="token-input">Personal Access Token</label>
+        <p class="settings-hint">Needs <code>repo</code> and <code>read:user</code> scopes. <a href="https://github.com/settings/tokens/new?scopes=repo,read:user" target="_blank">Create one ↗</a></p>
+        <input id="token-input" type="password" placeholder="ghp_…" autocomplete="off" spellcheck="false">
+        <p id="auth-status" class="auth-status"></p>
+        <button id="save-token-btn" class="primary-btn">Save Token</button>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-label" for="interval-select">Sync interval</label>
+        <select id="interval-select">
+          <option value="1">Every 1 minute</option>
+          <option value="5" selected>Every 5 minutes</option>
+          <option value="15">Every 15 minutes</option>
+          <option value="30">Every 30 minutes</option>
+        </select>
+      </div>
+
+      <div class="settings-section settings-footer">
+        <button id="sync-now-settings-btn" class="secondary-btn">Sync Now</button>
+        <button id="signout-btn" class="danger-btn">Sign Out</button>
+      </div>
+    </div>
+
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
