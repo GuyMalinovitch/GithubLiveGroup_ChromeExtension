@@ -11,6 +11,7 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "transform": {}
+    "transform": {},
+    "setupFilesAfterEnv": ["./jest.setup.js"]
   }
 }
