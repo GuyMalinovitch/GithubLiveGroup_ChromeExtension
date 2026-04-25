@@ -23,6 +23,7 @@ No existing Chrome extension auto-syncs a user's GitHub pull requests into a liv
 - Filtering by specific org or repo (all repos, all orgs — no filtering).
 - Webhook-based real-time sync (polling is sufficient and avoids infra complexity).
 - PR review actions, commenting, or any GitHub interaction beyond navigation.
+- OAuth backend/proxy (v1 uses PAT only; OAuth requires a server-side code exchange that is out of scope).
 
 ---
 
@@ -53,8 +54,9 @@ Responsibilities:
 
 A thin module imported by the service worker:
 - `fetchMyPRs(token, username)` — runs two parallel Search API queries:
-  - `GET /search/issues?q=type:pr+state:open+author:{username}`
-  - `GET /search/issues?q=type:pr+state:open+assignee:{username}`
+  - `GET /search/issues?q=type:pr+state:open+author:{username}&per_page=100`
+  - `GET /search/issues?q=type:pr+state:open+assignee:{username}&per_page=100`
+  - Paginates through all pages (follows `Link: <url>; rel="next"` headers) until no next page.
   - Merges and deduplicates by `html_url`.
 - `getAuthenticatedUser(token)` — `GET /user` to resolve username from token.
 - Handles 401 (invalid token) and 403 (rate limit) with distinct error codes.
@@ -72,10 +74,9 @@ Two views toggled by a gear (⚙) icon in the header:
 
 **Settings Panel View (toggled by gear icon):**
 - Auth section:
-  - Toggle between **OAuth** and **Personal Access Token** modes.
-  - OAuth: "Connect with GitHub" button → triggers `chrome.identity.launchWebAuthFlow`.
-  - PAT: text input for token, save button.
+  - **Personal Access Token (PAT)** input field with save button.
   - Shows connected username when authenticated.
+  - (OAuth requires a server-side code exchange; deferred to a future version.)
 - Sync section:
   - Dropdown for refresh interval: 1 min, 5 min, 15 min, 30 min.
 - Manual "Sync Now" button.
@@ -109,25 +110,28 @@ chrome.alarms fires
 ## Tab Group Management
 
 - Group name: **"My PRs"**, color: **blue**.
-- One group per Chrome window. On sync, find existing group by title in the current window; if not found, create a new one.
-- If the user manually closes the group, it is recreated on the next sync tick.
+- **Single managed group** — the extension maintains one global group. It is created in the focused window at first sync; subsequent syncs reuse it regardless of window. State tracks the `groupId` so the group can be found after window switches.
+- If the user manually closes the group (or all its tabs), it is recreated on the next sync tick.
+- If the user drags a tracked PR tab out of the group, it will be moved back into the group on the next sync.
 - Tabs within the group are not reordered by the extension after initial placement.
 - If a tab is manually closed by the user, it will be reopened on the next sync (since the PR is still open). This matches Arc's live-folder behavior.
 
+### Tab Lifecycle Safety
+
+Before closing a tab for a merged/closed PR, the extension **must verify** the tab's current URL still matches the tracked PR URL:
+- Listen to `chrome.tabs.onUpdated` and `chrome.tabs.onRemoved` to maintain the state map.
+- On `onUpdated` (URL changed): if the tab navigated away from the tracked PR URL, remove it from the state map — do not close it on next sync.
+- On `onRemoved`: remove the tab from the state map (user closed it manually).
+- Before `chrome.tabs.remove(tabId)`: query the tab's current URL and skip removal if it doesn't match.
+
 ---
 
-## Authentication
+### Authentication
 
 ### Personal Access Token (PAT)
 - User pastes a GitHub PAT with `repo` and `read:user` scopes.
-- Stored in `chrome.storage.sync` (encrypted by Chrome, synced across devices).
-- Username resolved once via `GET /user` and cached in storage.
-
-### GitHub OAuth
-- Requires a registered GitHub OAuth App with redirect URI set to the extension's identity redirect URL (`https://<extension-id>.chromiumapp.org/`).
-- Flow: popup button → `chrome.identity.launchWebAuthFlow` → GitHub auth page → redirect with `code` → extension exchanges `code` for token via GitHub's token endpoint.
-- Token and username stored identically to PAT path.
-- **Note:** OAuth client ID is bundled in the extension; client secret must be kept server-side. For a fully client-side extension, PKCE is not supported by GitHub OAuth Apps; the extension will use a minimal proxy or the implicit flow if available. As a pragmatic default, PAT is the primary auth method; OAuth is a convenience.
+- Stored in `chrome.storage.local` (not synced — keeps the token local to the device).
+- Username resolved once via `GET /user` and cached in `chrome.storage.local`.
 
 ### First Launch
 - If no token is configured, the popup opens directly to the Settings Panel view with an explanatory message.
@@ -142,34 +146,31 @@ chrome.alarms fires
 | 401 Unauthorized | Badge shows ⚠, popup shows "Token invalid — check settings" |
 | 403 Rate limited | Skip sync tick, retry on next alarm; badge shows rate-limit warning |
 | Network error | Retry on next alarm tick; last-known state preserved |
-| Tab already closed manually | `chrome.tabs.remove` on unknown tab ID is a no-op; state is cleaned up |
+| Tab already closed manually | `tabs.onRemoved` listener cleans up state map; no stale ID stored |
+| `chrome.tabs.remove` fails | Catch the error, remove stale entry from state map |
 | PR tab opened in wrong window | Tabs are created in the focused window at sync time |
 
 ---
 
 ## Storage Schema
 
-**`chrome.storage.sync`** (user settings, synced across devices):
+**`chrome.storage.local`** (all data local to the device):
 ```json
 {
   "authToken": "ghp_...",
-  "authMethod": "pat" | "oauth",
   "username": "guymali",
-  "refreshIntervalMinutes": 5
-}
-```
-
-**`chrome.storage.local`** (runtime state, local only):
-```json
-{
+  "refreshIntervalMinutes": 5,
   "tabState": {
-    "https://github.com/org/repo/pull/142": 1234,
-    "https://github.com/org/repo/pull/138": 1235
+    "https://github.com/org/repo/pull/142": { "tabId": 1234, "windowId": 5 },
+    "https://github.com/org/repo/pull/138": { "tabId": 1235, "windowId": 5 }
   },
+  "groupId": 7,
   "lastSyncedAt": 1714000000000,
   "lastError": null
 }
 ```
+
+All settings (including token and interval) are stored locally only. No data is synced via `chrome.storage.sync`.
 
 ---
 
@@ -197,7 +198,7 @@ github-pr-tabs/
 ```json
 {
   "manifest_version": 3,
-  "permissions": ["tabs", "tabGroups", "storage", "alarms", "identity"],
+  "permissions": ["tabs", "tabGroups", "storage", "alarms"],
   "host_permissions": ["https://api.github.com/*"],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html" }
@@ -208,4 +209,4 @@ github-pr-tabs/
 
 ## GitHub API Rate Limits
 
-The Search API allows 30 requests/minute authenticated. Two queries per sync tick = 2 req/tick. At 5-min intervals: 2 req per 5 min = well within limits. Even at 1-min intervals (24 req/min) it stays under the limit.
+The Search API allows 30 requests/minute authenticated. Two queries per sync tick (plus pagination if needed) = ~2–4 req/tick in practice. At 5-min intervals: ~0.4–0.8 req/min — well within limits. Even at 1-min intervals: ~2–4 req/min, still well under the 30 req/min cap.
