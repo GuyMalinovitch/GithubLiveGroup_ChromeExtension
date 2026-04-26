@@ -67,13 +67,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 // ── Core sync ─────────────────────────────────────────────────────────────────
 
 async function sync() {
-  const { authToken, username, groupId: storedGroupId, tabState = {} } =
-    await chrome.storage.local.get(['authToken', 'username', 'groupId', 'tabState']);
+  const { authToken, username, groupId: storedGroupId, tabState = {}, customFilter = '' } =
+    await chrome.storage.local.get(['authToken', 'username', 'groupId', 'tabState', 'customFilter']);
 
   if (!authToken) return;
 
   try {
-    const rawPRs = await fetchMyPRs(authToken, username);
+    const rawPRs = await fetchMyPRs(authToken, username, customFilter);
     const prs = rawPRs.map(pr => annotatePRRole(pr, username));
     const { newPRs, closedUrls } = computeDiff(prs, tabState);
 

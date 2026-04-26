@@ -79,3 +79,17 @@ test('fetchMyPRs throws RATE_LIMITED on 403', async () => {
   global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 403, headers: { get: () => null } });
   await expect(fetchMyPRs('ghp_token', 'user')).rejects.toMatchObject({ code: 'RATE_LIMITED' });
 });
+
+test('fetchMyPRs appends customFilter to both queries', async () => {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true, status: 200,
+    json: async () => ({ items: [] }),
+    headers: { get: () => null },
+  });
+
+  await fetchMyPRs('ghp_token', 'testuser', 'org:my-org -label:wip');
+
+  const urls = fetch.mock.calls.map(c => c[0]);
+  expect(urls[0]).toContain('org:my-org+-label:wip');
+  expect(urls[1]).toContain('org:my-org+-label:wip');
+});

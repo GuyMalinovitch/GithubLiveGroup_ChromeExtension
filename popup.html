@@ -74,6 +74,12 @@
       </div>
 
       <div class="settings-section">
+        <label class="settings-label" for="filter-input">Search filter</label>
+        <p class="settings-hint">Extra qualifiers appended to each query. E.g. <code>org:my-org</code> or <code>-label:wip</code></p>
+        <input id="filter-input" type="text" placeholder="org:my-org -label:wip" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="settings-section">
         <label class="settings-label" for="interval-select">Sync interval</label>
         <select id="interval-select">
           <option value="1">Every 1 minute</option>

@@ -109,8 +109,8 @@ async function focusPRTab(item) {
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 async function loadSettings() {
-  const { authToken, username, refreshIntervalMinutes = 5 } =
-    await chrome.storage.local.get(['authToken', 'username', 'refreshIntervalMinutes']);
+  const { authToken, username, refreshIntervalMinutes = 5, customFilter = '' } =
+    await chrome.storage.local.get(['authToken', 'username', 'refreshIntervalMinutes', 'customFilter']);
 
   if (authToken) {
     $('token-input').value = '';
@@ -121,6 +121,7 @@ async function loadSettings() {
   }
 
   $('interval-select').value = String(refreshIntervalMinutes);
+  $('filter-input').value = customFilter;
 }
 
 async function saveToken() {
@@ -158,12 +159,19 @@ async function saveInterval() {
   chrome.runtime.sendMessage({ type: 'setup' });
 }
 
+async function saveFilter() {
+  const customFilter = $('filter-input').value.trim();
+  await chrome.storage.local.set({ customFilter });
+  chrome.runtime.sendMessage({ type: 'sync' });
+}
+
 async function signOut() {
   await chrome.storage.local.clear();
   await chrome.alarms.clearAll();
   $('token-input').value = '';
   $('token-input').placeholder = 'ghp_…';
   $('auth-status').textContent = '';
+  $('filter-input').value = '';
   showPRView();
   showState('state-no-token');
 }
@@ -216,6 +224,7 @@ $('sync-btn').addEventListener('click', triggerSync);
 $('go-settings-btn').addEventListener('click', () => { showSettingsView(); loadSettings(); });
 $('save-token-btn').addEventListener('click', saveToken);
 $('interval-select').addEventListener('change', saveInterval);
+$('filter-input').addEventListener('change', saveFilter);
 $('sync-now-settings-btn').addEventListener('click', triggerSync);
 $('signout-btn').addEventListener('click', signOut);
 

@@ -45,14 +45,18 @@ export async function getAuthenticatedUser(token) {
   return data.login;
 }
 
-export async function fetchMyPRs(token, username) {
+export async function fetchMyPRs(token, username, customFilter = '') {
+  // Split custom filter on whitespace, join with + (GitHub search qualifier separator)
+  const extra = customFilter.trim()
+    ? '+' + customFilter.trim().split(/\s+/).join('+')
+    : '';
   const [authored, assigned] = await Promise.all([
     fetchAllPages(
-      `${BASE}/search/issues?q=is:pr+is:open+author:${encodeURIComponent(username)}&per_page=100`,
+      `${BASE}/search/issues?q=is:pr+is:open+author:${encodeURIComponent(username)}${extra}&per_page=100`,
       token
     ),
     fetchAllPages(
-      `${BASE}/search/issues?q=is:pr+is:open+assignee:${encodeURIComponent(username)}&per_page=100`,
+      `${BASE}/search/issues?q=is:pr+is:open+assignee:${encodeURIComponent(username)}${extra}&per_page=100`,
       token
     ),
   ]);
