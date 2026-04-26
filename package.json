@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "pack": "zip -r github-pr-tabs.zip manifest.json background.js github.js state.js tabgroup.js popup.html popup.css popup.js icons/icon16.png icons/icon32.png icons/icon48.png icons/icon128.png LICENSE PRIVACY.md && echo 'Created github-pr-tabs.zip'"
   },
   "devDependencies": {
     "jest": "^29.7.0"
