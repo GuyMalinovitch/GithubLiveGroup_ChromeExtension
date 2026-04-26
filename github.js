@@ -48,11 +48,11 @@ export async function getAuthenticatedUser(token) {
 export async function fetchMyPRs(token, username) {
   const [authored, assigned] = await Promise.all([
     fetchAllPages(
-      `${BASE}/search/issues?q=type:pr+state:open+author:${encodeURIComponent(username)}&per_page=100`,
+      `${BASE}/search/issues?q=is:pr+is:open+author:${encodeURIComponent(username)}&per_page=100`,
       token
     ),
     fetchAllPages(
-      `${BASE}/search/issues?q=type:pr+state:open+assignee:${encodeURIComponent(username)}&per_page=100`,
+      `${BASE}/search/issues?q=is:pr+is:open+assignee:${encodeURIComponent(username)}&per_page=100`,
       token
     ),
   ]);
