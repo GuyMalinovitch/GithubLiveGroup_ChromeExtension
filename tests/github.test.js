@@ -18,6 +18,11 @@ test('parseLinkNext returns null when no next rel', () => {
   expect(parseLinkNext(header)).toBe(null);
 });
 
+test('parseLinkNext rejects off-origin URLs', () => {
+  const header = '<https://attacker.example.com/steal>; rel="next"';
+  expect(parseLinkNext(header)).toBe(null);
+});
+
 test('getAuthenticatedUser returns login', async () => {
   global.fetch = jest.fn().mockResolvedValue({
     ok: true, status: 200,

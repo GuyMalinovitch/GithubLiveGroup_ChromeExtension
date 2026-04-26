@@ -29,7 +29,9 @@ chrome.alarms.onAlarm.addListener(alarm => {
 
 // ── Messages from popup ───────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Only accept messages from this extension's own pages (popup, options)
+  if (sender.id !== chrome.runtime.id) return;
   if (msg.type === 'sync') {
     sync().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
     return true; // keep message channel open for async response

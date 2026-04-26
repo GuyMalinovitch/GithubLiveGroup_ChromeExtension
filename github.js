@@ -11,7 +11,11 @@ function headers(token) {
 export function parseLinkNext(linkHeader) {
   if (!linkHeader) return null;
   const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-  return match ? match[1] : null;
+  if (!match) return null;
+  const url = match[1];
+  // Only follow pagination URLs on the trusted GitHub API origin
+  if (!url.startsWith('https://api.github.com/')) return null;
+  return url;
 }
 
 async function fetchAllPages(url, token) {

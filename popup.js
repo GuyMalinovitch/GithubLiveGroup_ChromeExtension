@@ -65,7 +65,7 @@ function renderGroup(listId, countId, items) {
     const li = document.createElement('li');
     li.className = 'pr-item';
     li.innerHTML = `
-      <span class="pr-number">#${item.number}</span>
+      <span class="pr-number">#${escHtml(String(item.number))}</span>
       <div class="pr-body">
         <span class="pr-title" title="${escHtml(item.title)}">${escHtml(item.title)}</span>
         <span class="pr-repo">${escHtml(item.repo)}</span>
