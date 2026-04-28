@@ -7,7 +7,6 @@ export async function findGroup(storedGroupId) {
   try {
     return await chrome.tabGroups.get(storedGroupId);
   } catch {
-    await chrome.storage.local.remove('groupId');
     return null;
   }
 }
@@ -18,13 +17,12 @@ export async function findGroup(storedGroupId) {
  *
  * NOTE: chrome.tabs.group expects windowId inside createProperties, not at the top level.
  */
-export async function createGroup(tabId, windowId) {
+export async function createGroup(tabId, windowId, title = 'My PRs', color = 'blue') {
   const groupId = await chrome.tabs.group({
     tabIds: [tabId],
     createProperties: { windowId },
   });
-  await chrome.tabGroups.update(groupId, { title: 'My PRs', color: 'blue' });
-  await chrome.storage.local.set({ groupId });
+  await chrome.tabGroups.update(groupId, { title, color });
   return groupId;
 }
 

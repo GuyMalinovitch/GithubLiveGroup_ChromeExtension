@@ -11,6 +11,7 @@
   --green: #3fb950;
   --authored-color: #3fb950;
   --assigned-color: #388bfd;
+  --team-color: #a371f7;
   --danger: #f85149;
   --primary-btn-bg: #238636;
   --primary-btn-hover: #2ea043;
@@ -29,6 +30,7 @@
     --green: #1a7f37;
     --authored-color: #1a7f37;
     --assigned-color: #0969da;
+    --team-color: #8250df;
     --danger: #d1242f;
     --primary-btn-bg: #1f883d;
     --primary-btn-hover: #1a7f37;
@@ -128,6 +130,7 @@ header {
 
 #authored-section .section-header { color: var(--authored-color); }
 #assigned-section .section-header { color: var(--assigned-color); }
+#team-sections .section-header { color: var(--team-color); }
 
 .pr-group { list-style: none; padding-bottom: 4px; }
 
@@ -143,6 +146,7 @@ header {
 .pr-item:hover { background: var(--surface); }
 #authored-list .pr-item { border-left-color: var(--authored-color); }
 #assigned-list .pr-item { border-left-color: var(--assigned-color); }
+#team-sections .pr-item { border-left-color: var(--team-color); }
 
 .pr-number { color: var(--accent); font-size: 11px; white-space: nowrap; padding-top: 1px; }
 .pr-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
