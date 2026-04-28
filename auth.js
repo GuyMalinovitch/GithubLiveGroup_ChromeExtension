@@ -1,7 +1,7 @@
 // Replace with the Client ID from your GitHub OAuth App
 // (Settings → Developer settings → OAuth Apps → your app)
 // Device Flow does NOT need a client_secret.
-const CLIENT_ID = 'YOUR_CLIENT_ID';
+const CLIENT_ID = 'Ov23liI9dx9IdfAULnVU';
 const SCOPES = 'repo';
 
 const DEVICE_CODE_URL = 'https://github.com/login/device/code';
