@@ -1,4 +1,5 @@
 import { groupByRole, groupTeamByAuthor, relativeTime } from './state.js';
+import { startDeviceFlow, pollOnce } from './auth.js';
 import { getAuthenticatedUser } from './github.js';
 
 const $ = id => document.getElementById(id);
@@ -28,7 +29,7 @@ function renderPRList(tabState, lastSyncedAt, lastError) {
 
   if (lastError === 'UNAUTHORIZED') {
     showState('state-error');
-    $('error-msg').textContent = 'Token invalid — check your settings.';
+    $('error-msg').textContent = 'Authorization failed — sign out and sign in again.';
     return;
   }
   if (lastError === 'RATE_LIMITED') {
@@ -101,7 +102,7 @@ function renderTeamSections(byAuthor) {
 }
 
 function hideAllStates() {
-  for (const id of ['state-no-token', 'state-loading', 'state-error', 'state-empty', 'pr-list']) {
+  for (const id of ['state-no-token', 'state-auth-pending', 'state-loading', 'state-error', 'state-empty', 'pr-list']) {
     $(id).classList.add('hidden');
   }
 }
@@ -119,7 +120,7 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// ── Tab focus ─────────────────────────────────────────────────────────────────
+// ── Tab focus ───────────
 
 async function focusPRTab(item) {
   try {
@@ -131,52 +132,128 @@ async function focusPRTab(item) {
   }
 }
 
+// ── OAuth Flow Device ────────────────────────
+
+let pollTimer = null;
+
+function stopPolling() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+}
+
+async function startOAuthFlow() {
+  showState('state-loading');
+  let flowData;
+  try {
+    flowData = await startDeviceFlow();
+  } catch {
+    showState('state-error');
+    $('error-msg').textContent = 'Could not reach GitHub. Check your connection.';
+    return;
+  }
+
+  const { device_code, user_code, verification_uri, expires_in, interval } = flowData;
+  const expiresAt = Date.now() + expires_in * 1000;
+
+  // Persist so the background alarm can poll if the popup is closed
+  await chrome.storage.local.set({ pendingAuth: { device_code, expiresAt, interval } });
+  chrome.runtime.sendMessage({ type: 'startAuthPoll' }).catch(() => {});
+
+  $('user-code-display').textContent = user_code;
+  $('device-link').href = verification_uri;
+  showState('state-auth-pending');
+
+  schedulePopupPoll(device_code, interval, expiresAt);
+}
+
+function schedulePopupPoll(device_code, intervalSecs, expiresAt) {
+  stopPolling();
+  if (Date.now() > expiresAt) { onAuthExpired(); return; }
+  pollTimer = setTimeout(async () => {
+    try {
+      const result = await pollOnce(device_code);
+      if (result.status === 'ok') {
+        await onAuthSuccess(result.token);
+      } else if (result.status === 'expired') {
+        onAuthExpired();
+      } else if (result.status === 'denied') {
+        await cancelAuth();
+        showState('state-no-token');
+      } else {
+        const next = result.status === 'slow_down' ? (result.newInterval ?? intervalSecs) : intervalSecs;
+        schedulePopupPoll(device_code, next, expiresAt);
+      }
+    } catch {
+      // Network hiccup — retry on next tick
+      schedulePopupPoll(device_code, intervalSecs, expiresAt);
+    }
+  }, intervalSecs * 1000);
+}
+
+async function onAuthSuccess(token) {
+  stopPolling();
+  let username;
+  try {
+    username = await getAuthenticatedUser(token);
+  } catch {
+    showState('state-error');
+    $('error-msg').textContent = 'Authorized, but could not fetch your username.';
+    return;
+  }
+  await chrome.storage.local.set({ authToken: token, username, authType: 'oauth' });
+  await chrome.storage.local.remove('pendingAuth');
+  chrome.runtime.sendMessage({ type: 'setup' }).catch(() => {});
+  await loadView();
+}
+
+function onAuthExpired() {
+  stopPolling();
+  chrome.storage.local.remove('pendingAuth');
+  showState('state-error');
+  $('error-msg').textContent = 'Authorization timed out. Please try again.';
+}
+
+async function cancelAuth() {
+  stopPolling();
+  await chrome.storage.local.remove('pendingAuth');
+}
+
+/** On popup open: if a device flow was already started, resume fast polling. */
+async function resumePendingAuth() {
+  const { pendingAuth } = await chrome.storage.local.get('pendingAuth');
+  if (!pendingAuth) return false;
+  if (Date.now() > pendingAuth.expiresAt) {
+    await chrome.storage.local.remove('pendingAuth');
+    return false;
+  }
+  // user_code is not re-fetched — instruct user to check the tab they opened
+  $('user-code-display').textContent = '(see previously opened tab)';
+  $('device-link').href = 'https://github.com/login/device';
+  showState('state-auth-pending');
+  schedulePopupPoll(pendingAuth.device_code, pendingAuth.interval ?? 5, pendingAuth.expiresAt);
+  return true;
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 async function loadSettings() {
   const { authToken, username, refreshIntervalMinutes = 5, customFilter = '', teamUsernames = '' } =
     await chrome.storage.local.get(['authToken', 'username', 'refreshIntervalMinutes', 'customFilter', 'teamUsernames']);
 
+  const status = $('auth-status');
+  const signinBtn = $('signin-settings-btn');
   if (authToken) {
-    $('token-input').value = '';
-    $('token-input').placeholder = '••••••••••••• (saved)';
-    const status = $('auth-status');
     status.className = 'auth-status ok';
-    status.textContent = username ? `Connected as @${username}` : 'Token saved';
+    status.textContent = username ? `Connected as @${escHtml(username)}` : 'Connected';
+    signinBtn.classList.add('hidden');
+  } else {
+    status.className = 'auth-status';
+    status.textContent = 'Not signed in.';
+    signinBtn.classList.remove('hidden');
   }
 
   $('interval-select').value = String(refreshIntervalMinutes);
   $('filter-input').value = customFilter;
   $('team-usernames-input').value = teamUsernames;
-}
-
-async function saveToken() {
-  const token = $('token-input').value.trim();
-  const status = $('auth-status');
-
-  if (!token) {
-    status.className = 'auth-status err';
-    status.textContent = 'Please enter a token.';
-    return;
-  }
-
-  status.className = 'auth-status';
-  status.textContent = 'Verifying…';
-
-  try {
-    const username = await getAuthenticatedUser(token);
-    await chrome.storage.local.set({ authToken: token, username });
-    status.className = 'auth-status ok';
-    status.textContent = `Connected as @${username}`;
-    $('token-input').value = '';
-    $('token-input').placeholder = '••••••••••••• (saved)';
-    chrome.runtime.sendMessage({ type: 'setup' });
-  } catch (err) {
-    status.className = 'auth-status err';
-    status.textContent = err.code === 'UNAUTHORIZED'
-      ? 'Invalid token — check scopes and try again.'
-      : 'Could not reach GitHub. Check your connection.';
-  }
 }
 
 async function saveInterval() {
@@ -198,10 +275,9 @@ async function saveTeamUsernames() {
 }
 
 async function signOut() {
+  stopPolling();
   await chrome.storage.local.clear();
   await chrome.alarms.clearAll();
-  $('token-input').value = '';
-  $('token-input').placeholder = 'ghp_…';
   $('auth-status').textContent = '';
   $('filter-input').value = '';
   $('team-usernames-input').value = '';
@@ -219,7 +295,7 @@ document.querySelectorAll('.section-header').forEach(btn => {
   });
 });
 
-// ── Sync ──────────────────────────────────────────────────────────────────────
+Sync // ── ──────────────────────────
 
 async function triggerSync() {
   showState('state-loading');
@@ -231,6 +307,16 @@ async function triggerSync() {
   await loadView();
 }
 
+// ── Storage change listener — auto-update when background alarm completes auth ─
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes.authToken?.newValue && !inSettings) {
+    stopPolling();
+    loadView();
+  }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function loadView() {
@@ -238,7 +324,8 @@ async function loadView() {
     await chrome.storage.local.get(['authToken', 'tabState', 'lastSyncedAt', 'lastError']);
 
   if (!authToken) {
-    showState('state-no-token');
+    const resumed = await resumePendingAuth();
+    if (!resumed) showState('state-no-token');
     return;
   }
 
@@ -254,8 +341,9 @@ $('settings-btn').addEventListener('click', () => {
 });
 
 $('sync-btn').addEventListener('click', triggerSync);
-$('go-settings-btn').addEventListener('click', () => { showSettingsView(); loadSettings(); });
-$('save-token-btn').addEventListener('click', saveToken);
+$('signin-btn').addEventListener('click', startOAuthFlow);
+$('signin-settings-btn').addEventListener('click', () => { showPRView(); startOAuthFlow(); });
+$('cancel-auth-btn').addEventListener('click', async () => { await cancelAuth(); showState('state-no-token'); });
 $('interval-select').addEventListener('change', saveInterval);
 $('filter-input').addEventListener('change', saveFilter);
 $('team-usernames-input').addEventListener('change', saveTeamUsernames);

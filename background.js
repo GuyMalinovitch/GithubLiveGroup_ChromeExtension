@@ -1,8 +1,10 @@
 import { fetchMyPRs, fetchTeamPRs } from './github.js';
 import { computeDiff, annotatePRRole, annotateTeamPRRole, buildTabEntry } from './state.js';
 import { findGroup, createGroup, addTabToGroup, removeTabSafely, ensureTabInGroup, resolveWindowForGroup } from './tabgroup.js';
+import { pollOnce } from './auth.js';
 
 const ALARM_NAME = 'pr-sync';
+const AUTH_ALARM_NAME = 'auth-poll';
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -25,6 +27,7 @@ async function setup() {
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === ALARM_NAME) sync();
+  if (alarm.name === AUTH_ALARM_NAME) pollAuthAlarm();
 });
 
 // ── Messages from popup ───────────────────────────────────────────────────────
@@ -38,6 +41,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'setup') {
     setup().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg.type === 'startAuthPoll') {
+    startAuthPoll().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
     return true;
   }
 });
@@ -63,6 +70,52 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     await chrome.storage.local.set({ tabState });
   }
 });
+
+// ── OAuth Device Flow (background polling fallback) ───────────────────────────
+
+/** Start a 1-minute repeating alarm to poll for an OAuth token in the background. */
+async function startAuthPoll() {
+  await chrome.alarms.clear(AUTH_ALARM_NAME);
+  await chrome.alarms.create(AUTH_ALARM_NAME, { delayInMinutes: 1, periodInMinutes: 1 });
+}
+
+/**
+ * Called by the auth-poll alarm every minute.
+ * If pendingAuth is in storage, poll GitHub once. On success store the token and
+ * kick off setup; on terminal failure clear pendingAuth and cancel the alarm.
+ */
+async function pollAuthAlarm() {
+  const { pendingAuth } = await chrome.storage.local.get('pendingAuth');
+  if (!pendingAuth) {
+    await chrome.alarms.clear(AUTH_ALARM_NAME);
+    return;
+  }
+
+  // Bail out if the device code has expired
+  if (Date.now() > pendingAuth.expiresAt) {
+    await chrome.storage.local.remove('pendingAuth');
+    await chrome.alarms.clear(AUTH_ALARM_NAME);
+    return;
+  }
+
+  try {
+    const result = await pollOnce(pendingAuth.device_code);
+    if (result.status === 'ok') {
+      const { getAuthenticatedUser } = await import('./github.js');
+      const username = await getAuthenticatedUser(result.token);
+      await chrome.storage.local.set({ authToken: result.token, username, authType: 'oauth' });
+      await chrome.storage.local.remove('pendingAuth');
+      await chrome.alarms.clear(AUTH_ALARM_NAME);
+      await setup();
+    } else if (result.status === 'expired' || result.status === 'denied') {
+      await chrome.storage.local.remove('pendingAuth');
+      await chrome.alarms.clear(AUTH_ALARM_NAME);
+    }
+    // 'pending' and 'slow_down' → do nothing, alarm fires again next minute
+  } catch {
+    // Network error — try again next alarm tick
+  }
+}
 
 // ── Core sync ─────────────────────────────────────────────────────────────────
 

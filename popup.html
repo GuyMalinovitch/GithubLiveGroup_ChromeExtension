@@ -23,8 +23,19 @@
 
       <div id="state-no-token" class="empty-state hidden">
         <div class="empty-icon">🔑</div>
-        <p>Add your GitHub token to get started.</p>
-        <button id="go-settings-btn" class="primary-btn">Open Settings</button>
+        <p>Sign in with GitHub to get started.</p>
+        <button id="signin-btn" class="primary-btn">Sign in with GitHub</button>
+      </div>
+
+      <div id="state-auth-pending" class="empty-state hidden">
+        <p class="auth-pending-label">Enter this code at GitHub:</p>
+        <div id="user-code-display" class="user-code"></div>
+        <a id="device-link" href="https://github.com/login/device" target="_blank" class="primary-btn auth-open-btn">Open github.com/login/device ↗</a>
+        <div class="auth-waiting">
+          <div class="spinner spinner-sm"></div>
+          <span>Waiting for authorization…</span>
+        </div>
+        <button id="cancel-auth-btn" class="text-btn">Cancel</button>
       </div>
 
       <div id="state-loading" class="empty-state hidden">
@@ -68,11 +79,9 @@
     <!-- Settings View -->
     <div id="settings-view" class="hidden">
       <div class="settings-section">
-        <label class="settings-label" for="token-input">Personal Access Token</label>
-        <p class="settings-hint">Needs <code>repo</code> and <code>read:user</code> scopes. <a href="https://github.com/settings/tokens/new?scopes=repo,read:user" target="_blank">Create one ↗</a></p>
-        <input id="token-input" type="password" placeholder="ghp_…" autocomplete="off" spellcheck="false">
+        <label class="settings-label">GitHub Account</label>
         <p id="auth-status" class="auth-status"></p>
-        <button id="save-token-btn" class="primary-btn">Save Token</button>
+        <button id="signin-settings-btn" class="primary-btn hidden">Sign in with GitHub</button>
       </div>
 
       <div class="settings-section">
