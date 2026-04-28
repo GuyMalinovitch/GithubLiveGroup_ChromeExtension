@@ -45,6 +45,32 @@ export async function getAuthenticatedUser(token) {
   return data.login;
 }
 
+export async function fetchTeamPRs(token, teamUsernames, customFilter = '') {
+  if (!teamUsernames || teamUsernames.length === 0) return [];
+  const extra = customFilter.trim()
+    ? '+' + customFilter.trim().split(/\s+/).join('+')
+    : '';
+  const pages = await Promise.all(
+    teamUsernames.map(u =>
+      fetchAllPages(
+        `${BASE}/search/issues?q=is:pr+is:open+author:${encodeURIComponent(u)}${extra}&per_page=100`,
+        token
+      )
+    )
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const prs of pages) {
+    for (const pr of prs) {
+      if (!seen.has(pr.html_url)) {
+        seen.add(pr.html_url);
+        merged.push(pr);
+      }
+    }
+  }
+  return merged;
+}
+
 export async function fetchMyPRs(token, username, customFilter = '') {
   // Split custom filter on whitespace, join with + (GitHub search qualifier separator)
   const extra = customFilter.trim()
