@@ -241,19 +241,52 @@ async function loadSettings() {
 
   const status = $('auth-status');
   const signinBtn = $('signin-settings-btn');
+  const togglePatBtn = $('toggle-pat-btn');
+  const patSection = $('pat-section');
   if (authToken) {
     status.className = 'auth-status ok';
     status.textContent = username ? `Connected as @${escHtml(username)}` : 'Connected';
     signinBtn.classList.add('hidden');
+    togglePatBtn.classList.add('hidden');
+    patSection.classList.add('hidden');
   } else {
     status.className = 'auth-status';
     status.textContent = 'Not signed in.';
     signinBtn.classList.remove('hidden');
+    togglePatBtn.classList.remove('hidden');
   }
 
   $('interval-select').value = String(refreshIntervalMinutes);
   $('filter-input').value = customFilter;
   $('team-usernames-input').value = teamUsernames;
+}
+
+async function saveToken() {
+  const token = $('token-input').value.trim();
+  const status = $('auth-status');
+  if (!token) {
+    status.className = 'auth-status err';
+    status.textContent = 'Please enter a token.';
+    return;
+  }
+  status.className = 'auth-status';
+  status.textContent = 'Verifying…';
+  try {
+    const username = await getAuthenticatedUser(token);
+    await chrome.storage.local.set({ authToken: token, username, authType: 'pat' });
+    status.className = 'auth-status ok';
+    status.textContent = `Connected as @${escHtml(username)}`;
+    $('token-input').value = '';
+    $('pat-section').classList.add('hidden');
+    $('toggle-pat-btn').classList.add('hidden');
+    $('signin-settings-btn').classList.add('hidden');
+    chrome.runtime.sendMessage({ type: 'setup' });
+  } catch (err) {
+    status.className = 'auth-status err';
+    status.textContent = err.code === 'UNAUTHORIZED'
+      ? 'Invalid token — check scopes and try again.'
+      : 'Could not reach GitHub. Check your connection.';
+  }
 }
 
 async function saveInterval() {
@@ -281,6 +314,7 @@ async function signOut() {
   $('auth-status').textContent = '';
   $('filter-input').value = '';
   $('team-usernames-input').value = '';
+  $('token-input').value = '';
   showPRView();
   showState('state-no-token');
 }
@@ -295,7 +329,7 @@ document.querySelectorAll('.section-header').forEach(btn => {
   });
 });
 
-Sync // ── ──────────────────────────
+// ── Sync ──────────────────────────────────────────────────────────────────────
 
 async function triggerSync() {
   showState('state-loading');
@@ -342,7 +376,10 @@ $('settings-btn').addEventListener('click', () => {
 
 $('sync-btn').addEventListener('click', triggerSync);
 $('signin-btn').addEventListener('click', startOAuthFlow);
+$('use-pat-btn').addEventListener('click', () => { showSettingsView(); loadSettings(); $('pat-section').classList.remove('hidden'); });
 $('signin-settings-btn').addEventListener('click', () => { showPRView(); startOAuthFlow(); });
+$('toggle-pat-btn').addEventListener('click', () => { $('pat-section').classList.toggle('hidden'); });
+$('save-token-btn').addEventListener('click', saveToken);
 $('cancel-auth-btn').addEventListener('click', async () => { await cancelAuth(); showState('state-no-token'); });
 $('interval-select').addEventListener('change', saveInterval);
 $('filter-input').addEventListener('change', saveFilter);

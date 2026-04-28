@@ -25,6 +25,7 @@
         <div class="empty-icon">🔑</div>
         <p>Sign in with GitHub to get started.</p>
         <button id="signin-btn" class="primary-btn">Sign in with GitHub</button>
+        <button id="use-pat-btn" class="text-btn">Use a Personal Access Token instead</button>
       </div>
 
       <div id="state-auth-pending" class="empty-state hidden">
@@ -82,6 +83,12 @@
         <label class="settings-label">GitHub Account</label>
         <p id="auth-status" class="auth-status"></p>
         <button id="signin-settings-btn" class="primary-btn hidden">Sign in with GitHub</button>
+        <div id="pat-section" class="hidden">
+          <p class="settings-hint">Needs <code>repo</code> scope. <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank">Create one ↗</a></p>
+          <input id="token-input" type="password" placeholder="ghp_…" autocomplete="off" spellcheck="false">
+          <button id="save-token-btn" class="primary-btn">Save Token</button>
+        </div>
+        <button id="toggle-pat-btn" class="text-btn hidden">Use a Personal Access Token instead</button>
       </div>
 
       <div class="settings-section">
