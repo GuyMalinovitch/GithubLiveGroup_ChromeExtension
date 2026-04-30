@@ -69,17 +69,29 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 let syncInFlight = false;
 
 function parseTeamUsernames(raw, selfUsername) {
+  const normalizedRaw = typeof raw === 'string' ? raw : '';
+  const selfUsernameLower = typeof selfUsername === 'string' ? selfUsername.toLowerCase() : '';
   const seen = new Set();
-  return raw
+  return normalizedRaw
     .split(',')
     .map(u => u.trim().replace(/^@/, ''))
     .filter(u => {
-      if (!u || u.toLowerCase() === selfUsername.toLowerCase()) return false;
+      if (!u || u.toLowerCase() === selfUsernameLower) return false;
       const lower = u.toLowerCase();
       if (seen.has(lower)) return false;
       seen.add(lower);
       return true;
     });
+}
+
+async function tabStillExists(tabId) {
+  if (tabId == null) return false;
+  try {
+    await chrome.tabs.get(tabId);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function sync() {
@@ -98,9 +110,8 @@ async function _sync() {
 
   if (!authToken) return;
 
-  const teamUsernames = parseTeamUsernames(rawTeamUsernames, username);
-
   try {
+    const teamUsernames = parseTeamUsernames(rawTeamUsernames, username);
     const rawMyPRs = await fetchMyPRs(authToken, username, customFilter);
     const myPRs = rawMyPRs.map(pr => annotatePRRole(pr, username));
 
@@ -113,7 +124,10 @@ async function _sync() {
           .filter(pr => !myUrls.has(pr.html_url))
           .map(pr => annotateTeamPRRole(pr));
       } catch {
-        // Non-fatal: team fetch failure doesn't block syncing the user's own PRs
+        // Non-fatal: preserve existing team tabs so they aren't closed on transient failure
+        teamPRs = Object.entries(tabState)
+          .filter(([, entry]) => entry.role === 'team')
+          .map(([url, entry]) => ({ html_url: url, role: 'team', author: entry.author }));
       }
     }
 
@@ -129,15 +143,19 @@ async function _sync() {
 
     const windowId = await resolveWindowForGroup(group ?? teamGroup);
 
-    // If a group no longer exists, clear stale tab entries for that group
+    // If a group no longer exists, only clear entries whose tabs are actually gone
     if (groupId == null) {
       for (const [key, entry] of Object.entries(tabState)) {
-        if (entry.role !== 'team') delete tabState[key];
+        if (entry.role !== 'team' && !(await tabStillExists(entry.tabId))) {
+          delete tabState[key];
+        }
       }
     }
     if (teamGroupId == null) {
       for (const [key, entry] of Object.entries(tabState)) {
-        if (entry.role === 'team') delete tabState[key];
+        if (entry.role === 'team' && !(await tabStillExists(entry.tabId))) {
+          delete tabState[key];
+        }
       }
     }
 

@@ -12,8 +12,8 @@ export async function findGroup(storedGroupId) {
 }
 
 /**
- * Create a new "My PRs" tab group containing the given tab.
- * Saves the new groupId to storage.
+ * Create a new tab group containing the given tab.
+ * Returns the new groupId; storage is managed by the caller.
  *
  * NOTE: chrome.tabs.group expects windowId inside createProperties, not at the top level.
  */
