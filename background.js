@@ -1,5 +1,5 @@
-import { fetchMyPRs } from './github.js';
-import { computeDiff, annotatePRRole, buildTabEntry } from './state.js';
+import { fetchMyPRs, fetchTeamPRs } from './github.js';
+import { computeDiff, annotatePRRole, annotateTeamPRRole, buildTabEntry } from './state.js';
 import { findGroup, createGroup, addTabToGroup, removeTabSafely, ensureTabInGroup, resolveWindowForGroup } from './tabgroup.js';
 
 const ALARM_NAME = 'pr-sync';
@@ -66,21 +66,100 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 
 // ── Core sync ─────────────────────────────────────────────────────────────────
 
+let syncInFlight = false;
+
+function parseTeamUsernames(raw, selfUsername) {
+  const normalizedRaw = typeof raw === 'string' ? raw : '';
+  const selfUsernameLower = typeof selfUsername === 'string' ? selfUsername.toLowerCase() : '';
+  const seen = new Set();
+  return normalizedRaw
+    .split(',')
+    .map(u => u.trim().replace(/^@/, ''))
+    .filter(u => {
+      if (!u || u.toLowerCase() === selfUsernameLower) return false;
+      const lower = u.toLowerCase();
+      if (seen.has(lower)) return false;
+      seen.add(lower);
+      return true;
+    });
+}
+
+async function tabStillExists(tabId) {
+  if (tabId == null) return false;
+  try {
+    await chrome.tabs.get(tabId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function sync() {
-  const { authToken, username, groupId: storedGroupId, tabState = {}, customFilter = '' } =
-    await chrome.storage.local.get(['authToken', 'username', 'groupId', 'tabState', 'customFilter']);
+  if (syncInFlight) return;
+  syncInFlight = true;
+  try {
+    await _sync();
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+async function _sync() {
+  const { authToken, username, groupId: storedGroupId, teamGroupId: storedTeamGroupId, tabState = {}, customFilter = '', teamUsernames: rawTeamUsernames = '' } =
+    await chrome.storage.local.get(['authToken', 'username', 'groupId', 'teamGroupId', 'tabState', 'customFilter', 'teamUsernames']);
 
   if (!authToken) return;
 
   try {
-    const rawPRs = await fetchMyPRs(authToken, username, customFilter);
-    const prs = rawPRs.map(pr => annotatePRRole(pr, username));
-    const { newPRs, closedUrls } = computeDiff(prs, tabState);
+    const teamUsernames = parseTeamUsernames(rawTeamUsernames, username);
+    const rawMyPRs = await fetchMyPRs(authToken, username, customFilter);
+    const myPRs = rawMyPRs.map(pr => annotatePRRole(pr, username));
 
-    // Validate / locate existing group
+    let teamPRs = [];
+    if (teamUsernames.length > 0) {
+      try {
+        const rawTeamPRs = await fetchTeamPRs(authToken, teamUsernames, customFilter);
+        const myUrls = new Set(myPRs.map(pr => pr.html_url));
+        teamPRs = rawTeamPRs
+          .filter(pr => !myUrls.has(pr.html_url))
+          .map(pr => annotateTeamPRRole(pr));
+      } catch {
+        // Non-fatal: preserve existing team tabs so they aren't closed on transient failure
+        teamPRs = Object.entries(tabState)
+          .filter(([, entry]) => entry.role === 'team')
+          .map(([url, entry]) => ({ html_url: url, role: 'team', author: entry.author }));
+      }
+    }
+
+    const allPRs = [...myPRs, ...teamPRs];
+    const prByUrl = new Map(allPRs.map(pr => [pr.html_url, pr]));
+
+    // Validate / locate existing groups
     const group = await findGroup(storedGroupId);
     let groupId = group?.id ?? null;
-    const windowId = await resolveWindowForGroup(group);
+
+    const teamGroup = await findGroup(storedTeamGroupId);
+    let teamGroupId = teamGroup?.id ?? null;
+
+    const windowId = await resolveWindowForGroup(group ?? teamGroup);
+
+    // If a group no longer exists, only clear entries whose tabs are actually gone
+    if (groupId == null) {
+      for (const [key, entry] of Object.entries(tabState)) {
+        if (entry.role !== 'team' && !(await tabStillExists(entry.tabId))) {
+          delete tabState[key];
+        }
+      }
+    }
+    if (teamGroupId == null) {
+      for (const [key, entry] of Object.entries(tabState)) {
+        if (entry.role === 'team' && !(await tabStillExists(entry.tabId))) {
+          delete tabState[key];
+        }
+      }
+    }
+
+    const { newPRs, closedUrls } = computeDiff(allPRs, tabState);
 
     // Close tabs for merged/closed PRs
     for (const url of closedUrls) {
@@ -93,27 +172,50 @@ async function sync() {
 
     // Open tabs for new PRs
     for (const pr of newPRs) {
-      if (groupId == null) {
-        // First PR — create the tab and group it
-        const tab = await chrome.tabs.create({ url: pr.html_url, windowId, active: false });
-        groupId = await createGroup(tab.id, windowId);
-        tabState[pr.html_url] = buildTabEntry(pr, tab.id, windowId);
+      if (pr.role === 'team') {
+        if (teamGroupId == null) {
+          const tab = await chrome.tabs.create({ url: pr.html_url, windowId, active: false });
+          teamGroupId = await createGroup(tab.id, windowId, 'Team PRs', 'green');
+          tabState[pr.html_url] = buildTabEntry(pr, tab.id, windowId);
+        } else {
+          const tabId = await addTabToGroup(pr.html_url, teamGroupId, windowId);
+          tabState[pr.html_url] = buildTabEntry(pr, tabId, windowId);
+        }
       } else {
-        const tabId = await addTabToGroup(pr.html_url, groupId, windowId);
-        tabState[pr.html_url] = buildTabEntry(pr, tabId, windowId);
+        if (groupId == null) {
+          // First PR — create the tab and group it
+          const tab = await chrome.tabs.create({ url: pr.html_url, windowId, active: false });
+          groupId = await createGroup(tab.id, windowId);
+          tabState[pr.html_url] = buildTabEntry(pr, tab.id, windowId);
+        } else {
+          const tabId = await addTabToGroup(pr.html_url, groupId, windowId);
+          tabState[pr.html_url] = buildTabEntry(pr, tabId, windowId);
+        }
       }
     }
 
-    // Re-group any tracked tabs the user dragged out of the group
+    // Reconcile metadata (role, author) for all retained entries
+    for (const [url, entry] of Object.entries(tabState)) {
+      const pr = prByUrl.get(url);
+      if (pr) tabState[url] = buildTabEntry(pr, entry.tabId, entry.windowId);
+    }
+
+    // Re-group any tracked tabs the user dragged out of their group
     if (groupId != null) {
       for (const entry of Object.values(tabState)) {
-        await ensureTabInGroup(entry.tabId, groupId);
+        if (entry.role !== 'team') await ensureTabInGroup(entry.tabId, groupId);
+      }
+    }
+    if (teamGroupId != null) {
+      for (const entry of Object.values(tabState)) {
+        if (entry.role === 'team') await ensureTabInGroup(entry.tabId, teamGroupId);
       }
     }
 
     await chrome.storage.local.set({
       tabState,
       groupId,
+      teamGroupId,
       lastSyncedAt: Date.now(),
       lastError: null,
     });

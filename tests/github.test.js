@@ -1,4 +1,4 @@
-import { parseLinkNext, getAuthenticatedUser, fetchMyPRs } from '../github.js';
+import { parseLinkNext, getAuthenticatedUser, fetchMyPRs, fetchTeamPRs } from '../github.js';
 
 afterEach(() => {
   global.fetch = undefined;
@@ -92,4 +92,49 @@ test('fetchMyPRs appends customFilter to both queries', async () => {
   const urls = fetch.mock.calls.map(c => c[0]);
   expect(urls[0]).toContain('org:my-org+-label:wip');
   expect(urls[1]).toContain('org:my-org+-label:wip');
+});
+
+// --- fetchTeamPRs ---
+
+test('fetchTeamPRs returns empty array for empty username list', async () => {
+  global.fetch = jest.fn();
+  const prs = await fetchTeamPRs('ghp_token', []);
+  expect(prs).toHaveLength(0);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+test('fetchTeamPRs fetches authored PRs for each team member', async () => {
+  const pr1 = { html_url: 'https://github.com/org/repo/pull/3', number: 3, title: 'PR3', user: { login: 'alice' }, repository_url: 'https://api.github.com/repos/org/repo', assignees: [] };
+  const pr2 = { html_url: 'https://github.com/org/repo/pull/4', number: 4, title: 'PR4', user: { login: 'bob' }, repository_url: 'https://api.github.com/repos/org/repo', assignees: [] };
+
+  global.fetch = jest.fn()
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ items: [pr1] }), headers: { get: () => null } })
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ items: [pr2] }), headers: { get: () => null } });
+
+  const prs = await fetchTeamPRs('ghp_token', ['alice', 'bob']);
+  expect(prs).toHaveLength(2);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch.mock.calls[0][0]).toContain('author:alice');
+  expect(fetch.mock.calls[1][0]).toContain('author:bob');
+});
+
+test('fetchTeamPRs deduplicates PRs shared across team members', async () => {
+  const sharedPR = { html_url: 'https://github.com/org/repo/pull/1', number: 1, title: 'PR1', user: { login: 'alice' }, repository_url: 'https://api.github.com/repos/org/repo', assignees: [] };
+
+  global.fetch = jest.fn()
+    .mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [sharedPR] }), headers: { get: () => null } });
+
+  const prs = await fetchTeamPRs('ghp_token', ['alice', 'bob']);
+  expect(prs).toHaveLength(1);
+});
+
+test('fetchTeamPRs appends customFilter to queries', async () => {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true, status: 200,
+    json: async () => ({ items: [] }),
+    headers: { get: () => null },
+  });
+
+  await fetchTeamPRs('ghp_token', ['alice'], 'org:my-org');
+  expect(fetch.mock.calls[0][0]).toContain('org:my-org');
 });

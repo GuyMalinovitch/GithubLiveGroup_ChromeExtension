@@ -60,6 +60,8 @@
           </button>
           <ul id="assigned-list" class="pr-group"></ul>
         </section>
+
+        <div id="team-sections"></div>
       </div>
     </div>
 
@@ -71,6 +73,12 @@
         <input id="token-input" type="password" placeholder="ghp_…" autocomplete="off" spellcheck="false">
         <p id="auth-status" class="auth-status"></p>
         <button id="save-token-btn" class="primary-btn">Save Token</button>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-label" for="team-usernames-input">Team usernames</label>
+        <p class="settings-hint">Comma-separated GitHub usernames to track. E.g. <code>alice, @bob</code></p>
+        <input id="team-usernames-input" type="text" placeholder="alice, bob, carol" autocomplete="off" spellcheck="false">
       </div>
 
       <div class="settings-section">

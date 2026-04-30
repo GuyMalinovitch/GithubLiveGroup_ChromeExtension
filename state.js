@@ -11,20 +11,38 @@ export function annotatePRRole(pr, username) {
   return { ...pr, role: isAuthor ? 'authored' : 'assigned' };
 }
 
+export function annotateTeamPRRole(pr) {
+  return { ...pr, role: 'team', author: pr.user.login };
+}
+
 export function buildTabEntry(pr, tabId, windowId) {
   const repo = pr.repository_url.replace('https://api.github.com/repos/', '');
-  return { tabId, windowId, number: pr.number, title: pr.title, repo, role: pr.role };
+  const entry = { tabId, windowId, number: pr.number, title: pr.title, repo, role: pr.role };
+  if (pr.role === 'team') entry.author = pr.author;
+  return entry;
+}
+
+export function groupTeamByAuthor(teamItems) {
+  const byAuthor = {};
+  for (const item of teamItems) {
+    const author = item.author || 'unknown';
+    if (!byAuthor[author]) byAuthor[author] = [];
+    byAuthor[author].push(item);
+  }
+  return Object.fromEntries(Object.keys(byAuthor).sort().map(k => [k, byAuthor[k]]));
 }
 
 export function groupByRole(tabState) {
   const authored = [];
   const assigned = [];
+  const team = [];
   for (const [url, entry] of Object.entries(tabState)) {
     const item = { url, ...entry };
     if (entry.role === 'authored') authored.push(item);
-    else assigned.push(item);
+    else if (entry.role === 'assigned') assigned.push(item);
+    else team.push(item);
   }
-  return { authored, assigned };
+  return { authored, assigned, team };
 }
 
 export function relativeTime(timestamp) {

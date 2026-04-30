@@ -1,4 +1,4 @@
-import { groupByRole, relativeTime } from './state.js';
+import { groupByRole, groupTeamByAuthor, relativeTime } from './state.js';
 import { getAuthenticatedUser } from './github.js';
 
 const $ = id => document.getElementById(id);
@@ -22,7 +22,7 @@ function showSettingsView() {
 // ── PR list rendering ─────────────────────────────────────────────────────────
 
 function renderPRList(tabState, lastSyncedAt, lastError) {
-  const { authored, assigned } = groupByRole(tabState);
+  const { authored, assigned, team } = groupByRole(tabState);
 
   hideAllStates();
 
@@ -37,7 +37,7 @@ function renderPRList(tabState, lastSyncedAt, lastError) {
     return;
   }
 
-  if (authored.length === 0 && assigned.length === 0) {
+  if (authored.length === 0 && assigned.length === 0 && team.length === 0) {
     showState('state-empty');
     return;
   }
@@ -47,6 +47,7 @@ function renderPRList(tabState, lastSyncedAt, lastError) {
 
   renderGroup('authored-list', 'authored-count', authored);
   renderGroup('assigned-list', 'assigned-count', assigned);
+  renderTeamSections(groupTeamByAuthor(team));
 }
 
 function renderGroup(listId, countId, items) {
@@ -64,14 +65,38 @@ function renderGroup(listId, countId, items) {
   for (const item of items) {
     const li = document.createElement('li');
     li.className = 'pr-item';
+    const authorTag = item.author ? ` · @${escHtml(item.author)}` : '';
     li.innerHTML = `
       <span class="pr-number">#${escHtml(String(item.number))}</span>
       <div class="pr-body">
         <span class="pr-title" title="${escHtml(item.title)}">${escHtml(item.title)}</span>
-        <span class="pr-repo">${escHtml(item.repo)}</span>
+        <span class="pr-repo">${escHtml(item.repo)}${authorTag}</span>
       </div>`;
     li.addEventListener('click', () => focusPRTab(item));
     list.appendChild(li);
+  }
+}
+
+function renderTeamSections(byAuthor) {
+  const container = $('team-sections');
+  container.innerHTML = '';
+  for (const [author, items] of Object.entries(byAuthor)) {
+    const listId = `team-list-${author}`;
+    const countId = `team-count-${author}`;
+    const section = document.createElement('section');
+    section.innerHTML = `
+      <button class="section-header" data-target="${listId}">
+        <span class="chevron">▸</span>
+        <span class="section-label">${escHtml(author.toUpperCase())}</span>
+        <span class="section-count" id="${countId}">0</span>
+      </button>
+      <ul id="${listId}" class="pr-group hidden"></ul>`;
+    section.querySelector('.section-header').addEventListener('click', () => {
+      const isOpen = section.querySelector('.section-header').classList.toggle('open');
+      section.querySelector(`#${listId}`).classList.toggle('hidden', !isOpen);
+    });
+    container.appendChild(section);
+    renderGroup(listId, countId, items);
   }
 }
 
@@ -109,8 +134,8 @@ async function focusPRTab(item) {
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 async function loadSettings() {
-  const { authToken, username, refreshIntervalMinutes = 5, customFilter = '' } =
-    await chrome.storage.local.get(['authToken', 'username', 'refreshIntervalMinutes', 'customFilter']);
+  const { authToken, username, refreshIntervalMinutes = 5, customFilter = '', teamUsernames = '' } =
+    await chrome.storage.local.get(['authToken', 'username', 'refreshIntervalMinutes', 'customFilter', 'teamUsernames']);
 
   if (authToken) {
     $('token-input').value = '';
@@ -122,6 +147,7 @@ async function loadSettings() {
 
   $('interval-select').value = String(refreshIntervalMinutes);
   $('filter-input').value = customFilter;
+  $('team-usernames-input').value = teamUsernames;
 }
 
 async function saveToken() {
@@ -165,6 +191,12 @@ async function saveFilter() {
   chrome.runtime.sendMessage({ type: 'sync' });
 }
 
+async function saveTeamUsernames() {
+  const teamUsernames = $('team-usernames-input').value.trim();
+  await chrome.storage.local.set({ teamUsernames });
+  chrome.runtime.sendMessage({ type: 'sync' });
+}
+
 async function signOut() {
   await chrome.storage.local.clear();
   await chrome.alarms.clearAll();
@@ -172,6 +204,7 @@ async function signOut() {
   $('token-input').placeholder = 'ghp_…';
   $('auth-status').textContent = '';
   $('filter-input').value = '';
+  $('team-usernames-input').value = '';
   showPRView();
   showState('state-no-token');
 }
@@ -225,6 +258,7 @@ $('go-settings-btn').addEventListener('click', () => { showSettingsView(); loadS
 $('save-token-btn').addEventListener('click', saveToken);
 $('interval-select').addEventListener('change', saveInterval);
 $('filter-input').addEventListener('change', saveFilter);
+$('team-usernames-input').addEventListener('change', saveTeamUsernames);
 $('sync-now-settings-btn').addEventListener('click', triggerSync);
 $('signout-btn').addEventListener('click', signOut);
 
