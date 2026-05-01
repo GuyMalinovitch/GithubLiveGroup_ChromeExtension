@@ -2,38 +2,21 @@
 
 :root {
   color-scheme: light dark;
-  --bg: #0d1117;
-  --surface: #161b22;
-  --border: #30363d;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --accent: #58a6ff;
-  --green: #3fb950;
-  --authored-color: #3fb950;
-  --assigned-color: #388bfd;
-  --team-color: #a371f7;
-  --danger: #f85149;
-  --primary-btn-bg: #238636;
-  --primary-btn-hover: #2ea043;
+  /* Only semantic role colors need explicit values — everything structural uses system colors */
+  --authored-color: #1a7f37;
+  --assigned-color: #0550ae;
+  --team-color:     #8250df;
+  --danger:         #cf222e;
   --radius: 6px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root {
-    --bg: #ffffff;
-    --surface: #f6f8fa;
-    --border: #d0d7de;
-    --text: #1f2328;
-    --muted: #656d76;
-    --accent: #0969da;
-    --green: #1a7f37;
-    --authored-color: #1a7f37;
-    --assigned-color: #0969da;
-    --team-color: #8250df;
-    --danger: #d1242f;
-    --primary-btn-bg: #1f883d;
-    --primary-btn-hover: #1a7f37;
+    --authored-color: #3fb950;
+    --assigned-color: #388bfd;
+    --team-color:     #a371f7;
+    --danger:         #f85149;
   }
 }
 
@@ -41,8 +24,8 @@ body {
   width: 340px;
   min-height: 200px;
   max-height: 560px;
-  background: var(--bg);
-  color: var(--text);
+  background: Canvas;
+  color: CanvasText;
   font-family: var(--font);
   font-size: 13px;
   overflow: hidden;
@@ -55,18 +38,18 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid ButtonBorder;
   flex-shrink: 0;
 }
 
-.logo { font-weight: 600; font-size: 14px; color: var(--accent); letter-spacing: 0.3px; }
+.logo { font-weight: 600; font-size: 14px; color: AccentColor; letter-spacing: 0.3px; }
 .header-actions { display: flex; align-items: center; gap: 6px; }
-.status-text { font-size: 11px; color: var(--muted); }
+.status-text { font-size: 11px; color: GrayText; }
 
 .icon-btn {
   background: none;
   border: none;
-  color: var(--muted);
+  color: GrayText;
   cursor: pointer;
   font-size: 16px;
   padding: 2px 4px;
@@ -74,7 +57,7 @@ header {
   line-height: 1;
   transition: color 0.15s, background 0.15s;
 }
-.icon-btn:hover { color: var(--text); background: var(--surface); }
+.icon-btn:hover { color: CanvasText; background: ButtonFace; }
 
 #pr-view, #settings-view { overflow-y: auto; flex: 1; }
 
@@ -87,13 +70,13 @@ header {
   gap: 8px;
   padding: 32px 24px;
   text-align: center;
-  color: var(--muted);
+  color: GrayText;
 }
 .empty-icon { font-size: 28px; }
 .spinner {
   width: 24px; height: 24px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
+  border: 2px solid ButtonBorder;
+  border-top-color: AccentColor;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -107,20 +90,20 @@ header {
   padding: 8px 12px 4px;
   background: none;
   border: none;
-  color: var(--muted);
+  color: GrayText;
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.6px;
   text-align: left;
 }
-.section-header:hover { color: var(--text); }
+.section-header:hover { color: CanvasText; }
 .chevron { font-size: 10px; transition: transform 0.15s; display: inline-block; }
 .section-header.open .chevron { transform: rotate(90deg); }
 .section-label { flex: 1; }
 .section-count {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: ButtonFace;
+  border: 1px solid ButtonBorder;
   border-radius: 10px;
   padding: 0 6px;
   font-size: 10px;
@@ -143,15 +126,15 @@ header {
   border-left: 3px solid transparent;
   transition: background 0.1s;
 }
-.pr-item:hover { background: var(--surface); }
+.pr-item:hover { background: ButtonFace; }
 #authored-list .pr-item { border-left-color: var(--authored-color); }
 #assigned-list .pr-item { border-left-color: var(--assigned-color); }
 #team-sections .pr-item { border-left-color: var(--team-color); }
 
-.pr-number { color: var(--accent); font-size: 11px; white-space: nowrap; padding-top: 1px; }
+.pr-number { color: AccentColor; font-size: 11px; white-space: nowrap; padding-top: 1px; }
 .pr-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.pr-title { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pr-repo { color: var(--muted); font-size: 11px; }
+.pr-title { color: CanvasText; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-repo { color: GrayText; font-size: 11px; }
 
 .settings-section {
   padding: 14px 14px 0;
@@ -161,31 +144,33 @@ header {
 }
 .settings-footer { flex-direction: row; padding-top: 10px; padding-bottom: 14px; gap: 8px; }
 
-.settings-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.5px; }
-.settings-hint { font-size: 11px; color: var(--muted); }
-.settings-hint a { color: var(--accent); text-decoration: none; }
-.settings-hint code { font-family: monospace; background: var(--surface); padding: 0 3px; border-radius: 3px; }
+.settings-label { font-size: 11px; font-weight: 600; color: GrayText; letter-spacing: 0.5px; }
+.settings-hint { font-size: 11px; color: GrayText; }
+.settings-hint a { color: AccentColor; text-decoration: none; }
+.settings-hint code { font-family: monospace; background: ButtonFace; padding: 0 3px; border-radius: 3px; }
 
 input[type="password"], input[type="text"], select {
   width: 100%;
   padding: 6px 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: Field;
+  border: 1px solid ButtonBorder;
   border-radius: var(--radius);
-  color: var(--text);
+  color: FieldText;
   font-size: 12px;
   outline: none;
+  font-family: var(--font);
 }
-input[type="password"]:focus, input[type="text"]:focus, select:focus { border-color: var(--accent); }
+input[type="password"]:focus, input[type="text"]:focus, select:focus { border-color: AccentColor; }
 
 .auth-status { font-size: 11px; min-height: 16px; }
-.auth-status.ok { color: var(--green); }
+.auth-status.ok { color: var(--authored-color); }
 .auth-status.err { color: var(--danger); }
 
-button { cursor: pointer; border-radius: var(--radius); font-size: 12px; padding: 6px 12px; border: none; }
-.primary-btn { background: var(--primary-btn-bg); color: #fff; }
-.primary-btn:hover { background: var(--primary-btn-hover); }
-.secondary-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
-.secondary-btn:hover { background: var(--border); }
+button { cursor: pointer; border-radius: var(--radius); font-size: 12px; padding: 6px 12px; border: none; font-family: var(--font); }
+.primary-btn { background: AccentColor; color: AccentColorText; }
+.primary-btn:hover { opacity: 0.88; }
+.secondary-btn { background: ButtonFace; border: 1px solid ButtonBorder; color: ButtonText; }
+.secondary-btn:hover { background: color-mix(in srgb, ButtonFace 75%, CanvasText 25%); }
 .danger-btn { background: none; border: 1px solid var(--danger); color: var(--danger); }
-.danger-btn:hover { background: rgba(248,81,73,0.1); }
+.danger-btn:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
